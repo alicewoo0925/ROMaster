@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Range of Motion Measurement</title>
+    <!-- MediaPipe의 Pose 라이브러리 로드 -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
+    <!-- MediaPipe의 Camera 라이브러리 로드 -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+    <style>
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- 비디오 요소와 캔버스 요소 -->
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="output"></canvas>
+
+    <script>
+        const videoElement = document.getElementById('video');
+        const canvasElement = document.getElementById('output');
+        const canvasCtx = canvasElement.getContext('2d');
+
+        // MediaPipe Pose 설정
+        const pose = new Pose({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+            }
+        });
+
+        pose.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        pose.onResults(onResults);
+
+        function onResults(results) {
+            // 캔버스에 비디오 프레임을 그림
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.poseLandmarks) {
+                // 랜드마크가 감지되면 각도 계산
+                const landmarks = results.poseLandmarks;
+                const rightShoulder = landmarks[12];
+                const rightElbow = landmarks[14];
+                const rightWrist = landmarks[16];
+
+                const angle = calculateAngle(rightShoulder, rightElbow, rightWrist);
+
+                // 각도를 캔버스에 표시
+                canvasCtx.font = '16px Arial';
+                canvasCtx.fillStyle = 'white';
+                canvasCtx.fillText(`Angle: ${Math.round(angle)}°`, rightElbow.x * canvasElement.width, rightElbow.y * canvasElement.height);
+            }
+        }
+
+        function calculateAngle(a, b, c) {
+            const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
+            let angle = Math.abs(radians * 180.0 / Math.PI);
+
+            if (angle > 180.0) {
+                angle = 360 - angle;
+            }
+            return angle;
+        }
+
+        // 카메라 설정 및 스트리밍
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await pose.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+        camera.start();
+    </script>
+</body>
+</html>
